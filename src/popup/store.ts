@@ -17,6 +17,15 @@ export interface Flashcard {
     backLoading?: boolean;
 }
 
+export interface VivaAnswer {
+    question: string;
+    answer: string;
+    score: number;
+    feedback: string;
+    verdict: string;
+    modelAnswer: string;
+}
+
 // ─── Store interface ─────────────────────────────────────────────
 interface StoreState {
     // Page context
@@ -43,6 +52,14 @@ interface StoreState {
     lastNotes: string;
     setLastNotes: (notes: string) => void;
 
+    // Summary cache (for chat access)
+    lastSummary: string;
+    setLastSummary: (summary: string) => void;
+
+    // Page content cache (for chat context)
+    pageContent: string;
+    setPageContent: (content: string) => void;
+
     // Study streak
     streak: number;
     lastStudyDate: string;
@@ -57,10 +74,20 @@ interface StoreState {
     autoSummarize: boolean;
     showTips: boolean;
     defaultLanguage: string;
+    selectedVoiceLang: string;
     setSearchEnhance: (enabled: boolean) => void;
     setAutoSummarize: (enabled: boolean) => void;
     setShowTips: (enabled: boolean) => void;
     setDefaultLanguage: (lang: string) => void;
+    setSelectedVoiceLang: (lang: string) => void;
+
+    // Viva mode
+    vivaQuestions: string[];
+    vivaAnswers: VivaAnswer[];
+    setVivaQuestions: (questions: string[]) => void;
+    setVivaAnswers: (answers: VivaAnswer[]) => void;
+    addVivaAnswer: (answer: VivaAnswer) => void;
+    clearViva: () => void;
 
     // Hydrated from chrome.storage
     hydrated: boolean;
@@ -109,7 +136,22 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     lastNotes: '',
-    setLastNotes: (notes) => set({ lastNotes: notes }),
+    setLastNotes: (notes) => {
+        chrome.storage.local.set({ lastNotes: notes });
+        set({ lastNotes: notes });
+    },
+
+    lastSummary: '',
+    setLastSummary: (summary) => {
+        chrome.storage.local.set({ lastSummary: summary });
+        set({ lastSummary: summary });
+    },
+
+    pageContent: '',
+    setPageContent: (content) => {
+        chrome.storage.local.set({ pageContent: content });
+        set({ pageContent: content });
+    },
 
     streak: 0,
     lastStudyDate: '',
@@ -157,11 +199,33 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ defaultLanguage: lang });
     },
 
+    selectedVoiceLang: 'auto',
+    setSelectedVoiceLang: (lang: string) => {
+        chrome.storage.local.set({ selectedVoiceLang: lang });
+        set({ selectedVoiceLang: lang });
+    },
+
+    // ─── Viva Mode ───────────────────────────────────────────────
+    vivaQuestions: [],
+    vivaAnswers: [],
+    setVivaQuestions: (questions: string[]) => {
+        set({ vivaQuestions: questions });
+    },
+    setVivaAnswers: (answers: VivaAnswer[]) => {
+        set({ vivaAnswers: answers });
+    },
+    addVivaAnswer: (answer: VivaAnswer) => {
+        set((s) => ({ vivaAnswers: [...s.vivaAnswers, answer] }));
+    },
+    clearViva: () => {
+        set({ vivaQuestions: [], vivaAnswers: [] });
+    },
+
     hydrated: false,
     hydrate: () => {
         if (get().hydrated) return;
         chrome.storage.local.get(
-            ['flashcards', 'focusMode', 'streak', 'lastStudyDate', 'darkMode', 'searchEnhance', 'autoSummarize', 'showTips', 'defaultLanguage'],
+            ['flashcards', 'focusMode', 'streak', 'lastStudyDate', 'darkMode', 'searchEnhance', 'autoSummarize', 'showTips', 'defaultLanguage', 'lastNotes', 'lastSummary', 'pageContent', 'selectedVoiceLang'],
             (result) => {
                 const dark = !!result.darkMode;
                 document.documentElement.classList.toggle('dark', dark);
@@ -175,6 +239,10 @@ export const useStore = create<StoreState>((set, get) => ({
                     autoSummarize: result.autoSummarize ?? false,
                     showTips: result.showTips ?? true,
                     defaultLanguage: result.defaultLanguage ?? 'Hindi',
+                    lastNotes: result.lastNotes ?? '',
+                    lastSummary: result.lastSummary ?? '',
+                    pageContent: result.pageContent ?? '',
+                    selectedVoiceLang: result.selectedVoiceLang ?? 'auto',
                     hydrated: true,
                 });
             },

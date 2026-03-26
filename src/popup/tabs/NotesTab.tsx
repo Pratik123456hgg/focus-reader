@@ -44,7 +44,7 @@ function Spinner() {
 
 // ─── Main Component ───────────────────────────────────────────────
 export default function NotesTab() {
-    const { pageText, pageTitle, lastNotes, setLastNotes, addFlashcard, updateFlashcardBack, flashcards } = useStore();
+    const { pageText, pageTitle, lastNotes, setLastNotes, setLastSummary, setPageContent, addFlashcard, updateFlashcardBack, flashcards } = useStore();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -60,12 +60,16 @@ export default function NotesTab() {
         setLoading(true);
         setError('');
 
+        // Save page content to store before generating summary
+        setPageContent(pageText);
+
         chrome.runtime.sendMessage(
             { action: 'summarize', pageText },
             (res: { success: boolean; data?: string; error?: string }) => {
                 setLoading(false);
                 if (res?.success && res.data) {
                     setLastNotes(res.data);
+                    setLastSummary(res.data);
                 } else {
                     setError(res?.error ?? 'Unknown error. Check your API key in background/index.ts.');
                 }
@@ -278,6 +282,21 @@ export default function NotesTab() {
                                     ))}
                                 </ul>
                             </div>
+                        )}
+
+                        {/* Summary saved badge */}
+                        {parsed.summary.length > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 }}
+                                className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2"
+                            >
+                                <span className="text-green-600 dark:text-green-400 font-semibold">✓</span>
+                                <span className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                    Summary saved — Chat AI now has full context
+                                </span>
+                            </motion.div>
                         )}
 
                         {/* Exam questions */}

@@ -320,104 +320,185 @@
         });
     }
 
-    // Run on load and on history changes
-    checkSearchEnhance();
-    window.addEventListener('popstate', checkSearchEnhance);
+    // ─── YouTube Data Extraction (Comprehensive) ──────────────────
+    function extractYouTubeData(): {
+        title: string;
+        channel: string;
+        description: string;
+        duration: string;
+        transcript: string;
+        chapters: string[];
+    } {
+        const data = {
+            title: '',
+            channel: '',
+            description: '',
+            duration: '',
+            transcript: '',
+            chapters: [] as string[],
+        };
 
-    // ─── YouTube Transcript Extraction ────────────────────────────
-    function extractYouTubeTranscript(): Promise<string> {
+        // Get video title - multiple selectors for different YouTube layouts
+        const titleElements = [
+            document.querySelector('h1.title yt-formatted-string'),
+            document.querySelector('h1.watch-title-container span'),
+            document.querySelector('ytd-watch-metadata h1 yt-formatted-string'),
+            document.querySelector('h1[class*="title"] span'),
+        ];
+        for (const el of titleElements) {
+            if (el?.textContent?.trim()) {
+                data.title = el.textContent.trim();
+                break;
+            }
+        }
+
+        // Get channel name
+        const channelElements = [
+            document.querySelector('ytd-channel-name a yt-formatted-string'),
+            document.querySelector('.channel-name a'),
+            document.querySelector('a.yt-simple-endpoint[href*="/channel/"]'),
+        ];
+        for (const el of channelElements) {
+            if (el?.textContent?.trim()) {
+                data.channel = el.textContent.trim();
+                break;
+            }
+        }
+
+        // Get video duration
+        const durationEl = document.querySelector('.ytp-time-duration, .style-scope.ytd-video-primary-info-renderer span[aria-label*="Duration"]');
+        if (durationEl?.textContent?.trim()) {
+            data.duration = durationEl.textContent.trim();
+        }
+
+        // Extract description with multiple fallback selectors
+        const descElements = [
+            document.querySelector('#description-inline-expander'),
+            document.querySelector('yt-formatted-string[role="region"]'),
+            document.querySelector('#eow-description'),
+            document.querySelector('[id*="description"]'),
+        ];
+        for (const el of descElements) {
+            if (el) {
+                const descText = el.textContent?.trim() || '';
+                if (descText.length > 50) {
+                    data.description = descText.split('\n').slice(0, 10).join(' ').slice(0, 1000);
+                    break;
+                }
+            }
+        }
+
+        // Extract chapters from description patterns
+        const chapterMatches = data.description.match(/(\d+:\d+(?::\d+)?)\s+([^\n]+)/g) || [];
+        data.chapters = chapterMatches
+            .map(ch => ch.trim())
+            .slice(0, 8)
+            .filter(ch => ch.length > 3);
+
+        // Try to get transcript from transcript panel
+        const transcriptSegments = document.querySelectorAll('ytd-transcript-segment-renderer');
+        if (transcriptSegments.length > 0) {
+            data.transcript = Array.from(transcriptSegments)
+                .map(seg => seg.textContent?.trim() || '')
+                .filter(Boolean)
+                .join(' ')
+                .slice(0, 6000);
+        }
+
+        return data;
+    }
+
+    // ─── YouTube Content Extraction (3 fallback methods) ──────────
+    function extractYouTubeContent(): Promise<string> {
         return new Promise((resolve) => {
-            // Try multiple approaches to get transcript
-            
-            // Approach 1: Try clicking the transcript toggle button
-            const tryTranscriptButton = () => {
-                // Look for "Show transcript" button in various places
-                const buttons = document.querySelectorAll('button, [role="button"]');
-                let transcriptBtn = null;
-                
-                for (const btn of buttons) {
-                    if (btn.textContent?.toLowerCase().includes('transcript') || 
-                        btn.title?.toLowerCase().includes('transcript') ||
-                        btn.getAttribute('aria-label')?.toLowerCase().includes('transcript')) {
-                        transcriptBtn = btn as HTMLElement;
-                        break;
-                    }
+            let extractedContent = '';
+
+            // METHOD 1: Extract transcript from panel if available
+            const extractFromTranscript = (): string => {
+                const segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+                if (segments.length > 0) {
+                    return Array.from(segments)
+                        .map((seg) => seg.textContent?.trim() || '')
+                        .filter(Boolean)
+                        .join(' ')
+                        .slice(0, 6000);
                 }
-                
-                if (transcriptBtn) {
-                    transcriptBtn.click();
-                    return true;
-                }
-                
-                // Try the three-dot menu approach
-                const menuButton = document.querySelector('[aria-label="More actions"]') as HTMLElement;
-                if (menuButton) {
-                    menuButton.click();
-                    return true;
-                }
-                
-                return false;
+                return '';
             };
 
-            if (!tryTranscriptButton()) {
-                resolve('Transcript button not found. Ensure video has captions enabled.');
+            // METHOD 2: Extract rich metadata (title, channel, duration, description, chapters, comments)
+            const extractVideoMetadata = (): string => {
+                const data = extractYouTubeData();
+                const parts: string[] = [];
+
+                if (data.title) parts.push(`TITLE: ${data.title}`);
+                if (data.channel) parts.push(`CHANNEL: ${data.channel}`);
+                if (data.duration) parts.push(`DURATION: ${data.duration}`);
+
+                if (data.description) {
+                    parts.push(`DESCRIPTION: ${data.description.slice(0, 500)}`);
+                }
+
+                if (data.chapters.length > 0) {
+                    parts.push(`CHAPTERS: ${data.chapters.join(' | ')}`);
+                }
+
+                // Extract top comments
+                const commentTexts = document.querySelectorAll('#content-text, yt-formatted-string[id*="content-text"]');
+                const comments = Array.from(commentTexts)
+                    .map(el => el.textContent?.trim() || '')
+                    .filter(text => text.length > 20 && text.length < 300)
+                    .slice(0, 5);
+
+                if (comments.length > 0) {
+                    parts.push(`TOP COMMENTS: ${comments.join(' | ')}`);
+                }
+
+                return parts.join('\n\n');
+            };
+
+            // METHOD 3: Extract visible page text as fallback
+            const extractVisibleText = (): string => {
+                const parts: string[] = [];
+
+                const title = document.querySelector('h1')?.textContent?.trim();
+                if (title) parts.push(title);
+
+                const metadata = document.querySelector('ytd-video-primary-info-renderer');
+                if (metadata) {
+                    const text = metadata.textContent?.trim().split('\n').filter(Boolean).slice(0, 15).join(' ');
+                    if (text) parts.push(text);
+                }
+
+                const secondary = document.querySelector('ytd-video-secondary-info-renderer');
+                if (secondary) {
+                    const text = secondary.textContent?.trim().split('\n').filter(Boolean).slice(0, 10).join(' ');
+                    if (text) parts.push(text);
+                }
+
+                return parts.join('\n\n');
+            };
+
+            // Try extraction methods in sequence
+            extractedContent = extractFromTranscript();
+            if (extractedContent.length > 100) {
+                resolve(extractedContent);
                 return;
             }
 
-            // Wait for transcript panel to open
-            setTimeout(() => {
-                // Approach 2: Try multiple selectors for transcript content
-                let transcriptText = '';
+            extractedContent = extractVideoMetadata();
+            if (extractedContent.length > 100) {
+                resolve(extractedContent);
+                return;
+            }
 
-                // Try selector 1: ytd-transcript-segment-renderer (official transcripts)
-                let segments = document.querySelectorAll('ytd-transcript-segment-renderer .segment-text');
-                if (segments.length > 0) {
-                    transcriptText = Array.from(segments)
-                        .map((seg) => seg.textContent?.trim() || '')
-                        .filter(Boolean)
-                        .join('\n');
-                }
+            extractedContent = extractVisibleText();
+            if (extractedContent.length > 100) {
+                resolve(extractedContent);
+                return;
+            }
 
-                // Try selector 2: yt-formatted-string with role button
-                if (!transcriptText) {
-                    segments = document.querySelectorAll('yt-formatted-string[role="button"]');
-                    transcriptText = Array.from(segments)
-                        .map((seg) => seg.textContent?.trim() || '')
-                        .filter(Boolean)
-                        .join('\n');
-                }
-
-                // Try selector 3: Generic transcript panel content
-                if (!transcriptText) {
-                    const transcriptPanel = document.querySelector('ytd-transcript-renderer, [aria-label*="Transcript"], .transcript-panel');
-                    if (transcriptPanel) {
-                        segments = transcriptPanel.querySelectorAll('[role="button"], .segment-text, .transcribed-text');
-                        transcriptText = Array.from(segments)
-                            .map((seg) => seg.textContent?.trim() || '')
-                            .filter(Boolean)
-                            .join('\n');
-                    }
-                }
-
-                // Try selector 4: All text content from visible elements in video player area
-                if (!transcriptText) {
-                    const mainContent = document.querySelector('ytd-rich-section-renderer, .content');
-                    if (mainContent) {
-                        const elements = mainContent.querySelectorAll('p, span, div');
-                        transcriptText = Array.from(elements)
-                            .map((el) => el.textContent?.trim() || '')
-                            .filter((text) => text && text.length > 10)
-                            .slice(0, 50)
-                            .join('\n');
-                    }
-                }
-
-                if (transcriptText.length > 20) {
-                    resolve(transcriptText);
-                } else {
-                    resolve('Unable to extract transcript. Try enabling captions on the video.');
-                }
-            }, 1500);
+            resolve('Unable to extract sufficient video content. Try another video.');
         });
     }
 
@@ -537,13 +618,76 @@
         highlighterTimeout = window.setTimeout(removeHighlighter, 4000);
     });
 
+    // ─── Voice Recording State ───────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let activeRecognition: any = null;
+
     // ─── Message Listener ─────────────────────────────────────────
     chrome.runtime.onMessage.addListener(
         (
-            request: { action: string; transcript?: string },
+            request: { action: string; transcript?: string; lang?: string },
             _sender,
-            sendResponse: (r: { text?: string; title?: string; transcript?: string; success?: boolean }) => void,
+            sendResponse: (r: { text?: string; title?: string; transcript?: string; success?: boolean; error?: string; data?: any; confidence?: number }) => void,
         ) => {
+            if (request.action === 'startVoiceRecognition') {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const w = window as any;
+                const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
+
+                if (!SpeechRecognition) {
+                    sendResponse({ error: 'not_supported' });
+                    return true;
+                }
+
+                if (activeRecognition) {
+                    activeRecognition.abort();
+                }
+
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = request.lang || '';
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                recognition.onresult = (event: any) => {
+                    const transcript = event.results[0][0].transcript;
+                    const confidence = event.results[0][0].confidence;
+                    sendResponse({ transcript, confidence });
+                };
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                recognition.onerror = (event: any) => {
+                    if (event.error === 'not-allowed') {
+                        sendResponse({ error: 'permission_denied' });
+                    } else {
+                        sendResponse({ error: event.error });
+                    }
+                };
+
+                recognition.onend = () => {
+                    activeRecognition = null;
+                };
+
+                activeRecognition = recognition;
+
+                try {
+                    recognition.start();
+                } catch (e) {
+                    sendResponse({ error: 'start_failed' });
+                }
+
+                return true; // Keep channel open for async response
+            }
+
+            if (request.action === 'stopVoiceRecognition') {
+                if (activeRecognition) {
+                    activeRecognition.stop();
+                    activeRecognition = null;
+                }
+                sendResponse({ stopped: true });
+                return true;
+            }
+
             if (request.action === 'getPageText') {
                 sendResponse({ text: extractPageText(), title: document.title });
                 return true;
@@ -559,9 +703,14 @@
                 return true;
             }
             if (request.action === 'getYouTubeTranscript') {
-                extractYouTubeTranscript().then((transcript) => {
-                    sendResponse({ transcript });
+                extractYouTubeContent().then((content) => {
+                    sendResponse({ transcript: content });
                 });
+                return true;
+            }
+            if (request.action === 'getYouTubeData') {
+                const data = extractYouTubeData();
+                sendResponse({ success: true, data } as any);
                 return true;
             }
             if (request.action === 'printPage') {

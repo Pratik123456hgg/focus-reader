@@ -74,15 +74,22 @@ async function summarizePage(pageText: string): Promise<string> {
 }
 
 // ─── Chat with AI ────────────────────────────────────────────────
-async function chatWithAI(message: string, pageContent: string, history: { role: string, content: string }[] = []): Promise<string> {
-    const truncated = pageContent.slice(0, 4000);
-    const system = `You are FocusRead AI, a friendly and knowledgeable study assistant. 
-    You help students understand the content of the webpage they are reading.
-    Answer clearly and concisely. If the question is unrelated to the page, 
-    still help but gently note the topic difference.
+async function chatWithAI(message: string, pageContent: string, lastSummary: string = '', history: { role: string, content: string }[] = []): Promise<string> {
+    const pageContextTruncated = pageContent.slice(0, 4000);
+    const summaryContextTruncated = lastSummary.slice(0, 2000);
 
-    Current webpage content for context:
-    ${truncated}`;
+    const system = `You are FocusRead AI, an intelligent study assistant embedded in the browser.
+
+PAGE CONTENT (what the user is currently reading):
+${pageContextTruncated}
+
+GENERATED SUMMARY (AI analysis already done on this page):
+${summaryContextTruncated}
+
+Use the above context to answer the student's questions accurately and specifically.
+Never say you have no information — always use the summary and page content above.
+If asked about a video, use the summary to give specific answers about that video.
+Be concise, clear, and student-friendly. Max 150 words unless asked for more.`;
 
     const res = await fetch(API_URL, {
         method: 'POST',
@@ -216,60 +223,118 @@ Focus on educational value. End with LEARN MORE: one suggested follow-up questio
     return callClaude(system, user);
 }
 
+// ─── Fetch YouTube Captions from API ───────────────────────────
+async function fetchYouTubeCaption(videoId: string): Promise<string> {
+    try {
+        // Fetch the video page to get ytInitialPlayerResponse
+        const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+        if (!response.ok) return '';
+
+        const html = await response.text();
+        const match = html.match(/"captionTracks":\[(.*?)\]/);
+        if (!match) return '';
+
+        // Extract caption track URL
+        const captionTrackMatch = html.match(/"baseUrl":"([^"]+)/);
+        if (!captionTrackMatch) return '';
+
+        const captionUrl = captionTrackMatch[1]
+            .replace(/\\u0026/g, '&')
+            .replace(/\\\//g, '/');
+
+        // Fetch caption XML
+        const captionResponse = await fetch(captionUrl);
+        if (!captionResponse.ok) return '';
+
+        const xml = await captionResponse.text();
+        // Parse XML and extract text
+        const textMatches = xml.match(/<text[^>]*>([^<]+)<\/text>/g) || [];
+        const captions = textMatches
+            .map(t => t.replace(/<[^>]+>/g, '').trim())
+            .filter(Boolean)
+            .join(' ');
+
+        return captions.slice(0, 6000);
+    } catch {
+        return '';
+    }
+}
+
 // ─── YouTube Summarize ──────────────────────────────────────────
-async function summarizeYouTube(transcript: string): Promise<{
+async function summarizeYouTube(transcript: string, youtubeData?: { title: string; channel: string; description: string; duration: string; chapters: string[] }): Promise<{
     videoTitle: string;
     videoSummary: string;
     keyPoints: string[];
     bestMoments: string[];
 }> {
     const truncated = transcript.slice(0, 8000);
-    const system = `You are a study assistant. Summarize this YouTube video transcript concisely.
-Format your response EXACTLY as:
+    
+    // Build rich context from YouTube metadata
+    const videoTitle = youtubeData?.title || 'YouTube Video';
+    const channel = youtubeData?.channel || 'Unknown Channel';
+    const duration = youtubeData?.duration || 'Unknown';
+    const description = youtubeData?.description?.slice(0, 500) || 'No description';
+    const chapters = youtubeData?.chapters?.slice(0, 8).join(', ') || 'No chapters';
+
+    const system = `You are a YouTube video study assistant. Based on video metadata and available transcript, generate a detailed, specific summary with real information from the video.`;
+
+    const user = `Video Details:
+Title: ${videoTitle}
+Channel: ${channel}
+Duration: ${duration}
+Description: ${description}
+Chapters: ${chapters}
+
+Transcript (if available):
+${truncated}
+
+Based on ALL the information above, generate a detailed study summary in this EXACT format:
 
 VIDEO SUMMARY:
-[3-5 sentence summary]
+- (specific point 1 from this video)
+- (specific point 2 from this video)
+- (specific point 3 from this video)
+- (specific point 4 from this video)
+- (specific point 5 from this video)
 
-KEY POINTS:
-• [point 1]
-• [point 2]
-• [point 3]
-• [point 4]
-• [point 5]
+KEY CONCEPTS:
+1. (real concept from this specific video)
+2. (real concept from this specific video)
+3. (real concept from this specific video)
 
-BEST MOMENTS:
-• [timestamp/topic 1]
-• [timestamp/topic 2]
-• [timestamp/topic 3]`;
+STUDY QUESTIONS:
+1. (question based on actual video content)?
+2. (question based on actual video content)?
+3. (question based on actual video content)?
 
-    const user = `Transcript:\n${truncated}`;
+IMPORTANT: Never use placeholder text like 'Point 1' or 'Concept one'. Use specific, real information from the video title, description, chapters, and transcript provided. If transcript is empty, make intelligent inferences based on the video title and description.`;
 
     const response = await callClaude(system, user);
 
     // Parse the response
-    const summaryMatch = response.match(/VIDEO SUMMARY:(.+?)(?=KEY POINTS:|$)/s);
-    const pointsMatch = response.match(/KEY POINTS:(.+?)(?=BEST MOMENTS:|$)/s);
-    const momentsMatch = response.match(/BEST MOMENTS:(.+?)$/s);
+    const summaryMatch = response.match(/VIDEO SUMMARY:(.+?)(?=KEY CONCEPTS:|$)/s);
+    const conceptsMatch = response.match(/KEY CONCEPTS:(.+?)(?=STUDY QUESTIONS:|$)/s);
+    const questionsMatch = response.match(/STUDY QUESTIONS:(.+?)$/s);
 
-    const videoSummary = summaryMatch ? summaryMatch[1].trim() : response.slice(0, 200);
-    const keyPointsText = pointsMatch ? pointsMatch[1].trim() : '';
-    const momentsText = momentsMatch ? momentsMatch[1].trim() : '';
+    const summaryText = summaryMatch ? summaryMatch[1].trim() : response.slice(0, 200);
+    const conceptsText = conceptsMatch ? conceptsMatch[1].trim() : '';
+    const questionsText = questionsMatch ? questionsMatch[1].trim() : '';
 
-    const keyPoints = keyPointsText
+    const keyPoints = conceptsText
         .split('\n')
-        .filter(line => line.trim().startsWith('•'))
-        .map(line => line.replace(/^•\s*/, '').trim())
+        .filter(line => line.trim().match(/^\d+\./)) 
+        .map(line => line.replace(/^\d+\.\s*/, '').trim())
         .filter(Boolean);
 
-    const bestMoments = momentsText
+    const bestMoments = questionsText
         .split('\n')
-        .filter(line => line.trim().startsWith('•'))
-        .map(line => line.replace(/^•\s*/, '').trim())
+        .filter(line => line.trim().match(/^\d+\./)) 
+        .map(line => line.replace(/^\d+\.\s*/, '').trim())
         .filter(Boolean);
 
     return {
-        videoTitle: 'YouTube Video',
-        videoSummary,
+        videoTitle: videoTitle,
+        videoSummary: summaryText,
         keyPoints: keyPoints.slice(0, 5),
         bestMoments: bestMoments.slice(0, 3),
     };
@@ -353,6 +418,100 @@ The 'correct' field is the index (0-3) of the correct option.`;
     }
 }
 
+// ─── Generate Viva Questions ────────────────────────────────────
+async function generateViva(pageText: string, summary: string): Promise<string[]> {
+    const truncated = pageText.slice(0, 5000);
+    const summaryTruncated = summary.slice(0, 1500);
+
+    const system = `You are a strict university examiner conducting a viva voce exam.
+Based on the following page content and summary, generate exactly 5 viva-style questions.
+These should test deep conceptual understanding, not just facts.
+Mix question types: explain, compare, justify, apply, critique.
+Return ONLY a JSON array of strings. Example:
+["Explain the core concept of X in your own words.", "Compare X and Y with specific examples.", "How would you apply X to solve Y?"]`;
+
+    const user = `Page Content:
+${truncated}
+
+Summary:
+${summaryTruncated}
+
+Generate 5 university-level viva voce questions based on the above content:`;
+
+    const response = await callClaude(system, user);
+
+    try {
+        const parsed = JSON.parse(response);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.slice(0, 5);
+        }
+        throw new Error('Invalid format');
+    } catch {
+        // Fallback questions
+        return [
+            'Explain the main concept from this content in your own words.',
+            'What is the significance and real-world application of this topic?',
+            'Can you compare this concept with a related idea you know?',
+            'What are the limitations or criticisms of this approach?',
+            'How would you teach this concept to someone else?',
+        ];
+    }
+}
+
+// ─── Evaluate Viva Answer ───────────────────────────────────────
+async function evaluateViva(
+    question: string,
+    userAnswer: string,
+    pageContent: string,
+): Promise<{
+    score: number;
+    verdict: string;
+    feedback: string;
+    modelAnswer: string;
+}> {
+    const contentTruncated = pageContent.slice(0, 3000);
+
+    const system = `You are a strict but fair university examiner. Evaluate this viva answer based on accuracy, depth of understanding, and clarity.
+Return ONLY a JSON object with this exact format (no markdown):
+{
+  "score": <number 0-10>,
+  "verdict": "Excellent" | "Good" | "Average" | "Needs Improvement" | "Incorrect",
+  "feedback": "<2-3 sentences specific feedback>",
+  "modelAnswer": "<ideal answer in 3-4 sentences>"
+}`;
+
+    const user = `Page Context:
+${contentTruncated}
+
+Viva Question:
+${question}
+
+Student's Answer:
+${userAnswer}
+
+Evaluate this answer strictly:`;
+
+    const response = await callClaude(system, user);
+
+    try {
+        const parsed = JSON.parse(response);
+        return {
+            score: Math.min(10, Math.max(0, parsed.score ?? 5)),
+            verdict: parsed.verdict ?? 'Average',
+            feedback: parsed.feedback ?? 'Response provided.',
+            modelAnswer: parsed.modelAnswer ?? 'A comprehensive answer should address the key concepts.',
+        };
+    } catch {
+        // Fallback evaluation
+        return {
+            score: 5,
+            verdict: 'Average',
+            feedback: 'Your answer addresses the question. Consider providing more specific examples or theoretical depth.',
+            modelAnswer: 'An ideal answer would demonstrate deep understanding with concrete examples and theoretical grounding.',
+        };
+    }
+}
+
 // ─── Explain Text ────────────────────────────────────────────────
 async function explainText(text: string): Promise<string> {
     const system = `Explain this concept clearly in 2-3 sentences for a student. Then give one real-world example.
@@ -381,7 +540,7 @@ chrome.action.onClicked.addListener((tab) => {
 // ─── Message Listener ────────────────────────────────────────────
 chrome.runtime.onMessage.addListener(
     (
-        request: { action: string; pageText?: string; message?: string; front?: string; enabled?: boolean; history?: { role: string; content: string }[]; problem?: string; topic?: string; essayType?: string; wordCount?: string; text?: string; targetLanguage?: string; query?: string },
+        request: { action: string; pageText?: string; pageContent?: string; message?: string; front?: string; enabled?: boolean; history?: { role: string; content: string }[]; problem?: string; topic?: string; essayType?: string; wordCount?: string; text?: string; targetLanguage?: string; query?: string; lastSummary?: string; detectedLanguage?: string; summary?: string; question?: string; userAnswer?: string },
         _sender,
         sendResponse: (r: { success: boolean; data?: string; enabled?: boolean; error?: string }) => void,
     ) => {
@@ -393,7 +552,7 @@ chrome.runtime.onMessage.addListener(
         }
 
         if (request.action === 'chat') {
-            chatWithAI(request.message ?? '', request.pageText ?? '', request.history ?? [])
+            chatWithAI(request.message ?? '', request.pageContent ?? request.pageText ?? '', request.lastSummary ?? '', request.history ?? [])
                 .then((data) => sendResponse({ success: true, data }))
                 .catch((err: Error) => sendResponse({ success: false, error: err.message }));
             return true;
@@ -434,6 +593,14 @@ chrome.runtime.onMessage.addListener(
             return true;
         }
 
+        if (request.action === 'translateToEnglish') {
+            const detectedLang = request.detectedLanguage ?? 'Unknown Language';
+            translateText(request.text ?? '', `English (from ${detectedLang})`)
+                .then((data) => sendResponse({ success: true, data }))
+                .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+            return true;
+        }
+
         if (request.action === 'searchEnhance') {
             searchEnhance(request.query ?? '')
                 .then((data) => sendResponse({ success: true, data }))
@@ -442,9 +609,26 @@ chrome.runtime.onMessage.addListener(
         }
 
         if (request.action === 'summarizeYouTube') {
-            summarizeYouTube(request.pageText ?? '')
-                .then((data) => sendResponse({ success: true, data }))
-                .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+            // Get YouTube data from content script first
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]?.id) {
+                    chrome.tabs.sendMessage(
+                        tabs[0].id,
+                        { action: 'getYouTubeData' },
+                        (youtubeDataResponse: any) => {
+                            const youtubeData = youtubeDataResponse?.data || {};
+                            summarizeYouTube(request.pageText ?? '', youtubeData)
+                                .then((data) => sendResponse({ success: true, data }))
+                                .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+                        },
+                    );
+                } else {
+                    // Fallback if no active tab
+                    summarizeYouTube(request.pageText ?? {})
+                        .then((data) => sendResponse({ success: true, data }))
+                        .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+                }
+            });
             return true;
         }
 
@@ -457,6 +641,20 @@ chrome.runtime.onMessage.addListener(
 
         if (request.action === 'generateQuiz') {
             generateQuiz(request.pageText ?? '')
+                .then((data) => sendResponse({ success: true, data }))
+                .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+            return true;
+        }
+
+        if (request.action === 'generateViva') {
+            generateViva(request.pageText ?? '', request.summary ?? '')
+                .then((data) => sendResponse({ success: true, data }))
+                .catch((err: Error) => sendResponse({ success: false, error: err.message }));
+            return true;
+        }
+
+        if (request.action === 'evaluateViva') {
+            evaluateViva(request.question ?? '', request.userAnswer ?? '', request.pageContent ?? '')
                 .then((data) => sendResponse({ success: true, data }))
                 .catch((err: Error) => sendResponse({ success: false, error: err.message }));
             return true;
