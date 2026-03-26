@@ -80,6 +80,14 @@ async function chatWithAI(message: string, pageContent: string, lastSummary: str
 
     const system = `You are FocusRead AI, an intelligent study assistant embedded in the browser.
 
+IMPORTANT LANGUAGE RULE:
+- Always reply in the SAME language as the user's message.
+- If the user writes in Marathi, reply ONLY in Marathi.
+- If the user writes in Hindi, reply ONLY in Hindi.
+- If the user writes in English, reply ONLY in English.
+- Do NOT translate unless explicitly asked.
+- Preserve the user's language strictly in every response.
+
 PAGE CONTENT (what the user is currently reading):
 ${pageContextTruncated}
 

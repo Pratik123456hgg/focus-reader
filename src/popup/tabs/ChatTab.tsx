@@ -83,6 +83,7 @@ export default function ChatTab() {
     const [detectedLanguage, setDetectedLanguage] = useState('en');
     const [isTranslating, setIsTranslating] = useState(false);
     const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+    const [showVoiceTooltip, setShowVoiceTooltip] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -235,16 +236,16 @@ export default function ChatTab() {
     return (
         <div className="flex flex-col h-full" style={{ height: 'calc(560px - 128px)' }}>
 
-            {/* Summary indicator */}
+            {/* Summary indicator — compact */}
             {lastSummary && (
-                <div className="bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/30 dark:to-cyan-900/30 px-3 py-2.5 border-b border-teal-100 dark:border-teal-900/50 flex items-center gap-2 text-xs text-teal-700 dark:text-teal-400 font-medium">
+                <div className="shrink-0 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/30 dark:to-cyan-900/30 px-3 py-2 border-b border-teal-100 dark:border-teal-900/50 flex items-center gap-2 text-xs text-teal-700 dark:text-teal-400 font-medium">
                     <span className="text-sm">✓</span>
-                    <span>AI has access to your video/page summary</span>
+                    <span>AI has context (page summary available)</span>
                 </div>
             )}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+            {/* Messages area — grows to fill, scrolls */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3 min-h-0">
 
                 {/* Empty state */}
                 {messages.length === 0 && (
@@ -277,65 +278,8 @@ export default function ChatTab() {
                 <div ref={bottomRef} />
             </div>
 
-            {/* Input area */}
-            <div className="border-t border-gray-100 dark:border-gray-700 px-3 py-3 flex flex-col gap-2 bg-white dark:bg-gray-800">
-                
-                {/* Voice info hint */}
-                <div className="text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/40">
-                    <span className="font-medium">💡 Tip:</span> Voice input works on websites. On Chrome system pages (new tab, settings, etc.), use text input instead.
-                </div>
-
-                {/* Language selector dropdown */}
-                <div className="relative">
-                    <button
-                        onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-                        className="text-xs flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                        <span>🎤 {VOICE_LANGUAGES[selectedVoiceLang as keyof typeof VOICE_LANGUAGES]?.name || 'Auto'}</span>
-                        <ChevronDown size={12} />
-                    </button>
-
-                    {showLanguageDropdown && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            className="absolute top-full left-0 z-50 mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg overflow-hidden"
-                        >
-                            <div className="grid grid-cols-2 gap-0 max-h-56 overflow-y-auto">
-                                {Object.entries(VOICE_LANGUAGES).map(([key, { name }]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => {
-                                            setSelectedVoiceLang(key);
-                                            setShowLanguageDropdown(false);
-                                        }}
-                                        className={`text-xs px-3 py-2 text-left whitespace-nowrap transition-colors ${
-                                            selectedVoiceLang === key
-                                                ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold'
-                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
-                                        }`}
-                                    >
-                                        {name}
-                                    </button>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-                </div>
-
-                {/* Spoken text label */}
-                {spokenText && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1.5 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700"
-                    >
-                        <span className="font-medium">Heard:</span> {spokenText}
-                    </motion.div>
-                )}
-
-                {/* Input with mic and send buttons */}
+            {/* INPUT FOOTER — Single Clean Input Bar */}
+            <div className="shrink-0 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-3">
                 <div className="flex items-end gap-2">
                     <div className="relative flex-1">
                         <textarea
@@ -346,48 +290,49 @@ export default function ChatTab() {
                             placeholder="Ask about this page…"
                             rows={1}
                             maxLength={800}
-                            className="w-full resize-none rounded-xl border border-gray-200 dark:border-gray-600
-                bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-gray-200
-                placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2.5 pr-9
-                focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 transition-colors"
+                            className="w-full resize-none rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2.5 focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 transition-colors"
                             style={{ minHeight: '42px', maxHeight: '100px', overflowY: 'auto' }}
                         />
                     </div>
 
-                    {/* Voice button */}
-                    <button
-                        onClick={handleVoice}
-                        disabled={isTranslating}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 ${isListening
-                            ? 'bg-red-500 text-white animate-pulse shadow-md shadow-red-500/30'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
-                            }`}
-                        title={isListening ? 'Stop recording' : 'Voice input'}
-                    >
-                        {isListening ? <MicOff size={15} /> : <Mic size={15} />}
-                    </button>
+                    {/* Voice button with tooltip */}
+                    <div className="relative">
+                        <button
+                            onClick={handleVoice}
+                            onMouseEnter={() => setShowVoiceTooltip(true)}
+                            onMouseLeave={() => setShowVoiceTooltip(false)}
+                            disabled={isTranslating}
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shrink-0 relative ${isListening
+                                ? 'bg-red-500 text-white animate-pulse shadow-md shadow-red-500/30'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+                                }`}
+                            title={isListening ? 'Stop recording' : 'Voice input'}
+                        >
+                            {isListening ? <MicOff size={15} /> : <Mic size={15} />}
+                        </button>
+
+                        {/* Voice tooltip */}
+                        {showVoiceTooltip && !isListening && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 8 }}
+                                className="absolute bottom-full right-0 mb-2 z-50 bg-gray-900 dark:bg-gray-950 text-white text-xs rounded-lg px-2 py-1.5 max-w-xs whitespace-normal pointer-events-none"
+                            >
+                                Works on websites. For Chrome system pages (new tab, settings), use text input.
+                            </motion.div>
+                        )}
+                    </div>
 
                     {/* Send button */}
                     <button
                         onClick={sendMessage}
                         disabled={!input.trim() || isWaiting || isTranslating}
-                        className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-teal-400 text-white
-              flex items-center justify-center shadow-md shadow-purple-500/25
-              disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-purple-500/40 transition-shadow shrink-0"
+                        className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-teal-400 text-white flex items-center justify-center shadow-md shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-purple-500/40 transition-shadow shrink-0"
                     >
                         <Send size={14} />
                     </button>
                 </div>
-
-                {/* Clear chat */}
-                {messages.length > 0 && (
-                    <button
-                        onClick={clearMessages}
-                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-400 dark:hover:text-red-400 transition-colors self-end"
-                    >
-                        <Trash2 size={11} /> Clear chat
-                    </button>
-                )}
             </div>
         </div>
     );

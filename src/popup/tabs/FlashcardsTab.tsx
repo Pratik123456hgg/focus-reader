@@ -20,17 +20,23 @@ function FlashcardItem({ card, onDelete }: { card: Flashcard; onDelete: () => vo
             <motion.div
                 animate={{ rotateY: flipped ? 180 : 0 }}
                 transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
-                className="relative cursor-pointer preserve-3d"
-                style={{ minHeight: '130px', transformStyle: 'preserve-3d' }}
+                className="relative cursor-pointer preserve-3d grid"
+                style={{ 
+                    transformStyle: 'preserve-3d',
+                    gridTemplateColumns: '1fr',
+                    gridTemplateRows: '1fr',
+                }}
                 onClick={() => setFlipped((f) => !f)}
             >
 
                 {/* Front face */}
                 <div
-                    className="absolute inset-0 backface-hidden rounded-xl bg-white dark:bg-gray-800
-            border border-purple-100 dark:border-gray-700 p-4 flex flex-col justify-between
-            shadow-sm hover:shadow-md transition-shadow"
-                    style={{ backfaceVisibility: 'hidden' }}
+                    className="rounded-xl bg-white dark:bg-gray-800 border border-purple-100 dark:border-gray-700 p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow"
+                    style={{ 
+                        backfaceVisibility: 'hidden',
+                        gridColumn: '1 / -1',
+                        gridRow: '1 / -1',
+                    }}
                 >
                     <div>
                         <div className="flex items-center gap-1.5 mb-2">
@@ -54,10 +60,13 @@ function FlashcardItem({ card, onDelete }: { card: Flashcard; onDelete: () => vo
 
                 {/* Back face */}
                 <div
-                    className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl
-            bg-gradient-to-br from-purple-500 to-teal-400 p-4
-            flex flex-col justify-between shadow-md"
-                    style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                    className="rounded-xl bg-gradient-to-br from-purple-500 to-teal-400 p-4 flex flex-col justify-between shadow-md"
+                    style={{ 
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        gridColumn: '1 / -1',
+                        gridRow: '1 / -1',
+                    }}
                 >
                     <div>
                         <div className="flex items-center gap-1.5 mb-2">
