@@ -1,0 +1,40 @@
+{
+    "manifest_version": 3,
+    "name": "FocusRead AI",
+    "version": "2.0.0",
+    "description": "Your AI Study Buddy – AI notes, chat, flashcards, focus mode, and more.",
+    "action": {
+        "default_title": "FocusRead AI"
+    },
+    "options_page": "options.html",
+    "side_panel": {
+        "default_path": "popup.html"
+    },
+    "background": {
+        "service_worker": "src/background/index.ts",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>",
+                "https://www.google.com/search*"
+            ],
+            "js": [
+                "src/content/index.ts"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "permissions": [
+        "activeTab",
+        "sidePanel",
+        "storage",
+        "scripting",
+        "tabs"
+    ],
+    "host_permissions": [
+        "https://api.groq.com/*",
+        "<all_urls>"
+    ]
+}

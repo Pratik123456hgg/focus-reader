@@ -1,0 +1,160 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ──────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 400px;
+    min-height: 560px;
+    overflow-x: hidden;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c4c0d8;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #9288c8;
+}
+
+/* ── 3D Flashcard flip ────────────────────────────────────────── */
+.preserve-3d {
+    transform-style: preserve-3d;
+}
+
+.backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+    transform: rotateY(180deg);
+}
+
+.perspective-1000 {
+    perspective: 1000px;
+}
+
+/* ── Gradient text ────────────────────────────────────────────── */
+.gradient-text {
+    background: linear-gradient(135deg, #6C63FF, #4ECDC4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ── Chat bubble tail ─────────────────────────────────────────── */
+.bubble-right::after {
+    content: '';
+    position: absolute;
+    bottom: 6px;
+    right: -6px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 0 6px 8px;
+    border-color: transparent transparent transparent #6C63FF;
+}
+
+.bubble-left::after {
+    content: '';
+    position: absolute;
+    bottom: 6px;
+    left: -6px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 8px 6px 0;
+    border-color: transparent #f3f4f6 transparent transparent;
+}
+
+.dark .bubble-left::after {
+    border-color: transparent #374151 transparent transparent;
+}
+
+/* ── Pomodoro SVG ring ────────────────────────────────────────── */
+.timer-ring-progress {
+    transition: stroke-dashoffset 1s linear;
+    transform-origin: center;
+    transform: rotate(-90deg);
+}
+
+/* ── Toggle switch ────────────────────────────────────────────── */
+.toggle-input:checked+.toggle-track {
+    background: linear-gradient(135deg, #6C63FF, #4ECDC4);
+}
+
+.toggle-input:checked+.toggle-track .toggle-thumb {
+    transform: translateX(22px);
+}
+
+.toggle-track {
+    width: 48px;
+    height: 26px;
+    background: #d1d5db;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    padding: 3px;
+    transition: background 0.3s;
+    cursor: pointer;
+}
+
+.toggle-thumb {
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    transition: transform 0.3s;
+}
+
+/* ── Loading dots ─────────────────────────────────────────────── */
+@keyframes bounce-dot {
+
+    0%,
+    60%,
+    100% {
+        transform: translateY(0);
+    }
+
+    30% {
+        transform: translateY(-6px);
+    }
+}
+
+.dot1 {
+    animation: bounce-dot 1.2s infinite 0s;
+}
+
+.dot2 {
+    animation: bounce-dot 1.2s infinite 0.2s;
+}
+
+.dot3 {
+    animation: bounce-dot 1.2s infinite 0.4s;
+}
