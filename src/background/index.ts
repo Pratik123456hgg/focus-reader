@@ -1,7 +1,7 @@
 // FocusRead AI — Background Service Worker
 // Handles all Groq API calls and chrome.storage state management
 
-const ANTHROPIC_API_KEY = 'REMOVED_KEY';
+const ANTHROPIC_API_KEY = import.meta.env.VITE_GROQ_API_KEY || 'your_api_key_here';
 const MODEL = 'llama-3.3-70b-versatile';
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MAX_TOKENS = 1024;
